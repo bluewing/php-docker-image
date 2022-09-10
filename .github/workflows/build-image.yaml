@@ -1,0 +1,64 @@
+# Builds the specified image using the Dockerfile, targeting the provided `docker_target`. This image is then published in GitHub Container Registry.
+name: Build docker image
+
+on:
+  workflow_call:
+    inputs:
+      docker_target:
+        required: true
+        type: string
+        description: The target in the Dockerfile that should be built. Either "dev" or "main".
+      php_version:
+        required: true
+        type: string
+        description: The PHP version contained within the image, used for tagging the image.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout a copy of the Dockerfile from the repository from the tag associated with the release that triggered
+      # this workflow.
+      - name: Check out repository code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      # Login to the GitHub Container Registry.
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Configure buildx as our preferred builder.
+      - name: Setup docker buildx
+        uses: docker/setup-buildx-action@v2
+        id: buildx
+        with:
+          install: true
+
+      # Generate the tags that should accompany the image.
+      # For the dev image, this is expected to be `dev-latest` and `dev-[PHP_VERSION]-latest`, and `dev-[PHP_VERSION]-[SCHEDULE].
+      - name: Generate tags
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/bluewing/php-docker-image
+          flavor: |
+            latest=true
+            prefix=${{ inputs.docker_target }}-,onlatest=true
+          tags: |
+            type=raw,value=${{ inputs.php_version }}-latest
+            type=raw,value=${{ inputs.php_version }}-{{ date 'YYYYMMDD' }}
+
+      # Build the docker image and publish it to GCR.
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          target: ${{ inputs.docker_target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

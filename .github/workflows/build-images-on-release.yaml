@@ -1,0 +1,19 @@
+# When a GitHub release event occurs, build both the development and production images contained within the `Dockerfile` using the `build-image.yaml` reusable workflow. Both images will then be published to GitHub Container Registry so they can be used as part of Bluewing application images.
+# This workflow run can take up to 20 minutes or more because the PHP extensions needed must be built from source.
+name: Build images on release
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  build-images:
+    strategy:
+      matrix:
+        docker_target: [dev, main]
+        php_version: [8.1.4]
+    uses: ./.github/workflows/build-image.yaml
+    with:
+      docker_target: ${{ matrix.docker_target }}
+      php_version: ${{ matrix.php_version }}
+    secrets: inherit
